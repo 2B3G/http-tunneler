@@ -199,10 +199,13 @@ function createConfig() {
 }
 
 function addTunnel(path, port) {
+  const existingPath = tunnels.filter((v) => Object.values(v)[0] == port);
+
   if (!fs.existsSync(CONFIG_PATH)) {
     createConfig();
-  } else if (tunnels.filter((v) => Object.values(v)[0] == port).length != 0) {
-    throw new Error("[ERROR] port already used");
+  } else if (existingPath.length != 0) {
+    const url = `http://127.0.0.1:${port}/${Object.keys(existingPath[0])}`;
+    throw new Error("[ERROR] port already used on: " + url);
   }
 
   tunnels.push({
