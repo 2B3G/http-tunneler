@@ -37,7 +37,7 @@ let server = http.createServer((req, res) => {
     for (let i = 2; i < subpaths.length; i++) {
       targetUrl += subpaths[i] + "/";
     }
-    targetUrl = `http://localhost:${port}/` + targetUrl;
+    targetUrl = `http://127.0.0.1:${port}/` + targetUrl;
 
     http
       .get(targetUrl, (externalRes) => {
@@ -99,11 +99,11 @@ program
 
 program
   .option("-c, --config_path", "Show the path to the saved tunnels file")
-  .action(() => {
-    console.log(path.join(__dirname, CONFIG_PATH));
-  });
+  .action(() => {}); // without this the flag doesnt work
 
 program.parse(process.argv);
+
+if (program.opts().config_path) console.log(path.join(__dirname, CONFIG_PATH));
 
 function generatePath() {
   const alphabet = [
