@@ -5,10 +5,13 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const url = require("url");
 
 const URL_LENGTH = 10;
 const program = new Command();
 const CONFIG_PATH = "./tunnels.json";
+// TODO : maybe make the user put the public port once and save it in some config
+const PUBLIC_PORT = 27399;
 let tunnels = getTunnels();
 
 let server = http.createServer((req, res) => {
@@ -35,22 +38,37 @@ let server = http.createServer((req, res) => {
 
     let targetUrl = "";
     for (let i = 2; i < subpaths.length; i++) {
-      targetUrl += subpaths[i] + "/";
+      targetUrl += "/" + subpaths[i];
     }
-    targetUrl = `http://127.0.0.1:${port}/` + targetUrl;
+    targetUrl = `http://127.0.0.1:${port}${targetUrl}`;
+    console.log(targetUrl);
+    const parsedTarget = url.parse(targetUrl);
 
-    http
-      .get(targetUrl, (externalRes) => {
-        externalRes.pipe(res);
-      })
-      .on("error", (err) => {
-        console.error(
-          `[ERROR] unknown error while tunneling to: ${targetUrl}.`,
-          err
-        );
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end();
-      });
+    const options = {
+      hostname: parsedTarget.hostname,
+      port: parsedTarget.port,
+      path: parsedTarget.path,
+      method: req.method,
+      headers: req.headers,
+    };
+
+    logRequest(targetUrl);
+
+    const tunnelRequest = http.request(options, (externalRes) => {
+      res.writeHead(externalRes.statusCode, externalRes.headers);
+      externalRes.pipe(res);
+    });
+
+    tunnelRequest.on("error", (err) => {
+      console.error(
+        `[ERROR] unknown error while tunneling to: ${targetUrl}.`,
+        err
+      );
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end();
+    });
+
+    req.pipe(tunnelRequest);
   }
 });
 
@@ -66,8 +84,7 @@ program
     const path = generatePath();
     try {
       addTunnel(path, port);
-      // TODO : maybe make the user put the public port once and save it in some config
-      console.log(`[SUCCESS] http://${await getIp()}:27399/${path}/`);
+      console.log(`[SUCCESS] http://${await getIp()}:${PUBLIC_PORT}/${path}/`);
     } catch (e) {
       console.log(e.message);
     }
@@ -89,8 +106,7 @@ program
   .command("start")
   .description("Starts the tunneling server")
   .action(() => {
-    // TODO : maybe make the user put the public port once and save it in some config
-    server.listen(27399, () =>
+    server.listen(PUBLIC_PORT, () =>
       console.log(
         "[SUCCESS] Tunnel server started ! Run tunnel <port> to open a tunnel to it"
       )
@@ -101,9 +117,26 @@ program
   .option("-c, --config_path", "Show the path to the saved tunnels file")
   .action(() => {}); // without this the flag doesnt work
 
+program
+  .option(
+    "-l, --list",
+    "List all the tunnel ports and the corespoding subpaths"
+  )
+  .action(() => {}); // without this the flag doesnt work
+
 program.parse(process.argv);
 
 if (program.opts().config_path) console.log(path.join(__dirname, CONFIG_PATH));
+if (program.opts().list) {
+  tunnels = getTunnels();
+  tunnels.forEach((tunnel) => {
+    console.log(`[${Object.values(tunnel)[0]}] ${Object.keys(tunnel)[0]}`);
+  });
+}
+
+function logRequest(url) {
+  console.log("[REQUEST] Target url: " + url);
+}
 
 function generatePath() {
   const alphabet = [
