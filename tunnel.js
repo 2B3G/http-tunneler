@@ -11,7 +11,6 @@ const URL_LENGTH = 10;
 const program = new Command();
 const CONFIG_PATH = "./tunnels.json";
 // TODO : maybe make the user put the public port once and save it in some config
-const PUBLIC_PORT = 27399;
 let tunnels = getTunnels();
 
 let server = http.createServer((req, res) => {
@@ -41,7 +40,6 @@ let server = http.createServer((req, res) => {
       targetUrl += "/" + subpaths[i];
     }
     targetUrl = `http://127.0.0.1:${port}${targetUrl}`;
-    console.log(targetUrl);
     const parsedTarget = url.parse(targetUrl);
 
     const options = {
@@ -84,7 +82,7 @@ program
     const path = generatePath();
     try {
       addTunnel(path, port);
-      console.log(`[SUCCESS] http://${await getIp()}:${PUBLIC_PORT}/${path}/`);
+      console.log(`[SUCCESS] http://${await getIp()}:<public_port>/${path}/`);
     } catch (e) {
       console.log(e.message);
     }
@@ -103,14 +101,28 @@ program
   });
 
 program
-  .command("start")
-  .description("Starts the tunneling server")
-  .action(() => {
-    server.listen(PUBLIC_PORT, () =>
-      console.log(
-        "[SUCCESS] Tunnel server started ! Run tunnel <port> to open a tunnel to it"
+  .command("start <port>")
+  .description("Starts the tunneling server at the specified public port")
+  .action((port) => {
+    if (tunnels.filter((v) => Object.values(v)[0] == port).length != 0) {
+      return console.log(
+        `[ERROR] this port is connected to an existing tunnel. to see all tunnels run tunnel -l' and to remove the port run 'tunnel remove ${port}'`
+      );
+    }
+
+    server
+      .listen(port, () =>
+        console.log(
+          "[SUCCESS] Tunnel server started ! Run tunnel <port> to open a tunnel to it"
+        )
       )
-    );
+      .on("error", (e) => {
+        if (e.code === "EADDRINUSE") {
+          console.log(
+            "[ERROR] port already in use. the tunneler may be running already"
+          );
+        } else throw e;
+      });
   });
 
 program
@@ -224,11 +236,11 @@ function getTunnels() {
   }
   const jsonData = fs.readFileSync(CONFIG_PATH, "utf8");
 
-  return jsonData == "" ? {} : JSON.parse(jsonData).tunnels;
+  return jsonData == "" ? [] : JSON.parse(jsonData).tunnels;
 }
 
 function createConfig() {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify({ tunnels: [] }));
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify({ tunnels: tunnels ?? [] }));
 }
 
 function addTunnel(path, port) {
@@ -237,8 +249,9 @@ function addTunnel(path, port) {
   if (!fs.existsSync(CONFIG_PATH)) {
     createConfig();
   } else if (existingPath.length != 0) {
-    const url = `http://127.0.0.1:${port}/${Object.keys(existingPath[0])}`;
-    throw new Error("[ERROR] port already used on: " + url);
+    throw new Error(
+      "[ERROR] port already used on subpath: " + Object.keys(existingPath[0])
+    );
   }
 
   tunnels.push({
